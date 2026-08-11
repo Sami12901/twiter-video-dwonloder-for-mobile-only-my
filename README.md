@@ -18,7 +18,7 @@ A full-stack social platform with a built-in X/Twitter video downloader, built f
 | Frontend | React + Vite + Tailwind CSS |
 | Backend | Express.js + TypeScript |
 | Database | SQLite (Prisma ORM) |
-| Auth | Session cookies + bcrypt |
+| Auth | Session cookies + bcryptjs |
 | Runtime | Node.js on Termux |
 
 ---
@@ -58,7 +58,7 @@ Then open **Chrome** and go to: `http://127.0.0.1:5173`
 npm install && cd backend && npm install && cd ../frontend && npm install && cd ..
 
 # Setup database
-cd backend && echo 'DATABASE_URL="file:./dev.db"' > .env && npx prisma generate && npx prisma db push && cd ..
+cd backend && echo 'DATABASE_URL="file:./dev.db"' > .env && npx prisma generate && cd ..
 
 # Start both servers
 npm start
