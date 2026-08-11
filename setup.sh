@@ -89,14 +89,12 @@ echo "  Press Ctrl+C to stop."
 echo ""
 
 # Start backend in background
-cd backend && npx tsx src/index.ts &
+(cd backend && npx tsx src/index.ts) &
 BACKEND_PID=$!
-cd ..
 
 # Start frontend
-cd frontend && npx vite --host 127.0.0.1 --port 5173 &
+(cd frontend && npx vite --host 127.0.0.1 --port 5173) &
 FRONTEND_PID=$!
-cd ..
 
 # Handle shutdown
 trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" INT TERM
