@@ -95,8 +95,9 @@ function App() {
     <Router>
       <div className="flex min-h-screen max-w-7xl mx-auto w-full">
         <DesktopSidebar />
+        <MobileHeader />
         
-        <main className="flex-1 flex flex-col min-h-screen pb-16 sm:pb-0">
+        <main className="flex-1 flex flex-col min-h-screen pt-14 pb-16 sm:pt-0 sm:pb-0">
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
             <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />

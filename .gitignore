@@ -2,6 +2,7 @@ node_modules/
 .env
 dist/
 build/
-backend/dev.db
-backend/dev.db-journal
+*.db
+*.db-journal
 .DS_Store
+*.log

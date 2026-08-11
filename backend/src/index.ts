@@ -10,7 +10,14 @@ const host = process.env.HOST || '127.0.0.1'; // Realme 11 5G target constraint
 export const prisma = new PrismaClient();
 
 app.use(cors({
-  origin: 'http://127.0.0.1:5173', // Vite default port
+  origin: (origin, callback) => {
+    // Allow requests from any localhost port (Vite may use 5173/5174/5175)
+    if (!origin || origin.startsWith('http://127.0.0.1') || origin.startsWith('http://localhost')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
