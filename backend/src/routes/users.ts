@@ -34,7 +34,7 @@ router.get('/:username', async (req, res) => {
 // Follow a user
 router.post('/:id/follow', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const targetUserId = req.params.id;
+    const targetUserId = req.params.id as string;
     const currentUserId = req.userId!;
 
     if (targetUserId === currentUserId) {
@@ -57,7 +57,7 @@ router.post('/:id/follow', requireAuth, async (req: AuthenticatedRequest, res) =
 // Unfollow a user
 router.delete('/:id/follow', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const targetUserId = req.params.id;
+    const targetUserId = req.params.id as string;
     const currentUserId = req.userId!;
 
     await prisma.follow.deleteMany({
