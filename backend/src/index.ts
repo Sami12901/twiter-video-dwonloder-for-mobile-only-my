@@ -7,8 +7,14 @@ const app = express();
 const port = process.env.PORT || 3000;
 const host = process.env.HOST || '127.0.0.1'; // Realme 11 5G target constraint
 
-export const prisma = new PrismaClient();
+import { createClient } from '@libsql/client';
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
 
+const libsql = createClient({
+  url: process.env.DATABASE_URL || 'file:./dev.db',
+});
+const adapter = new PrismaLibSQL(libsql);
+export const prisma = new PrismaClient({ adapter });
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests from any localhost port (Vite may use 5173/5174/5175)
