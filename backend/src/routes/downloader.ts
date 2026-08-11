@@ -7,6 +7,30 @@ import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
+// Save Twitter Cookies
+router.post('/cookies', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { cookies } = req.body; // raw document.cookie string
+    const user = db.data.users.find(u => u.id === req.userId);
+    
+    if (user) {
+      user.cookies = cookies;
+      db.write();
+      res.json({ message: 'Cookies saved successfully' });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to save cookies' });
+  }
+});
+
+// Check if user has cookies
+router.get('/cookies', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const user = db.data.users.find(u => u.id === req.userId);
+  res.json({ hasCookies: !!(user && user.cookies && user.cookies.trim() !== '') });
+});
+
 // Analyze X URL
 router.post('/analyze', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
@@ -16,10 +40,10 @@ router.post('/analyze', requireAuth, async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Invalid or unsupported X/Twitter URL' });
     }
 
-    const metadata = await extractMediaMetadata(url);
+    const metadata = await extractMediaMetadata(url, req.userId!);
     res.json(metadata);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to analyze URL' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to analyze URL' });
   }
 });
 
@@ -54,7 +78,7 @@ router.post('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
     db.write();
 
     // Start async processing without blocking request (Event-driven)
-    processDownloadJob(jobId, url, quality)
+    processDownloadJob(jobId, url, quality, req.userId!)
       .then(async (filePath) => {
         const job = db.data.downloaderJobs.find(j => j.id === jobId);
         if (job) {

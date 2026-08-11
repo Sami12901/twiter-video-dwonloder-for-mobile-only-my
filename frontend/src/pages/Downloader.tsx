@@ -8,6 +8,12 @@ export const Downloader = () => {
   const [metadata, setMetadata] = useState<any>(null);
   const [jobs, setJobs] = useState<any[]>([]);
   const [error, setError] = useState('');
+  
+  // Cookie Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [cookiesStr, setCookiesStr] = useState('');
+  const [hasCookies, setHasCookies] = useState(false);
+  const [isSavingCookies, setIsSavingCookies] = useState(false);
 
   const fetchJobs = async () => {
     try {
@@ -18,11 +24,37 @@ export const Downloader = () => {
     }
   };
 
+  const checkCookies = async () => {
+    try {
+      const res = await api.get('/downloader/cookies');
+      setHasCookies(res.data.hasCookies);
+    } catch (err) {
+      console.error('Failed to check cookies', err);
+    }
+  };
+
   useEffect(() => {
     fetchJobs();
-    const interval = setInterval(fetchJobs, 5000); // Poll for job status
+    checkCookies();
+    const interval = setInterval(fetchJobs, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleSaveCookies = async () => {
+    if (!cookiesStr.trim()) return;
+    setIsSavingCookies(true);
+    try {
+      await api.post('/downloader/cookies', { cookies: cookiesStr });
+      setCookiesStr('');
+      setShowSettings(false);
+      checkCookies();
+      alert('Cookies saved successfully!');
+    } catch (err) {
+      alert('Failed to save cookies');
+    } finally {
+      setIsSavingCookies(false);
+    }
+  };
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,11 +115,67 @@ export const Downloader = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 max-w-2xl mx-auto w-full">
-      <div className="flex items-center gap-2 mb-6">
-        <TerminalSquare className="text-[var(--color-primary)]" size={28} />
-        <h1 className="text-2xl font-bold">X Video Downloader</h1>
+    <div className="flex-1 flex flex-col p-4 max-w-2xl mx-auto w-full relative">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <TerminalSquare className="text-[var(--color-primary)]" size={28} />
+          <h1 className="text-2xl font-bold">X Video Downloader</h1>
+        </div>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="text-xs font-bold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--bg)] transition-colors flex items-center gap-2"
+        >
+          {hasCookies ? <span className="text-green-500">● Cookies Active</span> : <span className="text-yellow-500">● No Cookies</span>}
+          Settings
+        </button>
       </div>
+
+      {showSettings && (
+        <div className="bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-6 shadow-lg z-10 relative">
+          <h2 className="text-xl font-bold mb-3">Twitter Cookie Collector</h2>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            Twitter often blocks guest downloads. To fix this, provide your Twitter cookies.
+          </p>
+          
+          <div className="bg-[var(--bg)] p-3 rounded-lg border border-[var(--border)] mb-4">
+            <h3 className="font-bold text-sm mb-2 text-yellow-500">Mobile Trick (Bookmarklet)</h3>
+            <ol className="text-xs text-[var(--text-muted)] list-decimal pl-4 space-y-1 mb-2">
+              <li>Copy the code below</li>
+              <li>Create a new bookmark in Chrome and paste the code into the URL field</li>
+              <li>Go to <strong>x.com</strong> and click the bookmark</li>
+              <li>Your cookies will be copied! Come back here and paste them below.</li>
+            </ol>
+            <textarea 
+              readOnly 
+              className="w-full text-xs font-mono bg-black/50 text-green-400 p-2 rounded border border-[var(--border)] h-16 cursor-text"
+              value={`javascript:(function(){navigator.clipboard.writeText(document.cookie).then(()=>alert('Cookies copied!')).catch(()=>prompt('Copy this:',document.cookie));})();`}
+            />
+          </div>
+
+          <label className="block text-sm font-medium mb-2">Paste Raw Cookies</label>
+          <textarea
+            value={cookiesStr}
+            onChange={(e) => setCookiesStr(e.target.value)}
+            placeholder="auth_token=...; ct0=...;"
+            className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text)] text-sm focus:outline-none focus:border-[var(--color-primary)] transition-colors mb-3 h-24"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="px-4 py-2 rounded-lg font-medium text-sm border border-[var(--border)] hover:bg-[var(--bg)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveCookies}
+              disabled={isSavingCookies || !cookiesStr.trim()}
+              className="px-4 py-2 rounded-lg font-bold text-sm bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {isSavingCookies ? 'Saving...' : 'Save Cookies'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] mb-6 shadow-sm">
         <form onSubmit={handleAnalyze}>

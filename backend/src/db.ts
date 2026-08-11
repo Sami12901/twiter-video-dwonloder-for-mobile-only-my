@@ -4,7 +4,7 @@ import path from 'path';
 const DB_FILE = path.join(process.cwd(), 'dev.json');
 
 interface DatabaseSchema {
-  users: any[];
+  users: any[]; // Has {id, username, email, password, cookies, createdAt, updatedAt}
   sessions: any[];
   posts: any[];
   follows: any[];

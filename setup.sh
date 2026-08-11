@@ -20,7 +20,8 @@ echo ""
 # ----------------------------------------------------------
 echo "[1/6] Installing system packages..."
 pkg update -y && pkg upgrade -y
-pkg install -y nodejs git python make clang binutils
+pkg install -y nodejs git python make clang binutils ffmpeg
+pip install yt-dlp
 echo "  ✓ System packages installed"
 
 # ----------------------------------------------------------
