@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { prisma } from '../index';
+import db from '../db';
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -14,17 +14,20 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
   }
 
   try {
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { user: { select: { id: true, username: true, email: true } } },
-    });
+    const session: any = db.prepare(`
+      SELECT s.*, u.id as u_id, u.username as u_username, u.email as u_email 
+      FROM Session s 
+      JOIN User u ON s.userId = u.id 
+      WHERE s.token = ?
+    `).get(token);
 
-    if (!session || session.expiresAt < new Date()) {
+    if (!session || new Date(session.expiresAt) < new Date()) {
       return res.status(401).json({ error: 'Session expired' });
     }
 
-    req.userId = session.user.id;
-    req.user = session.user;
+    const user = { id: session.u_id, username: session.u_username, email: session.u_email };
+    req.userId = user.id;
+    req.user = user;
     next();
   } catch (error) {
     res.status(500).json({ error: 'Server error during authentication' });

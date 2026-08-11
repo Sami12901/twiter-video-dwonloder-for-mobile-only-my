@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { prisma } from '../index';
+import db from '../db';
 import crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -22,25 +23,18 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = registerSchema.parse(req.body);
 
-    const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email }, { username }] },
-    });
+    const existingUser = db.prepare('SELECT * FROM User WHERE email = ? OR username = ?').get(email, username);
 
     if (existingUser) {
       return res.status(400).json({ error: 'Username or email already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const userId = uuidv4();
 
-    const user = await prisma.user.create({
-      data: {
-        username,
-        email,
-        password: hashedPassword,
-      },
-    });
+    db.prepare('INSERT INTO User (id, username, email, password) VALUES (?, ?, ?, ?)').run(userId, username, email, hashedPassword);
 
-    res.status(201).json({ message: 'User created successfully', userId: user.id });
+    res.status(201).json({ message: 'User created successfully', userId });
   } catch (error) {
     res.status(400).json({ error: 'Registration failed', details: error });
   }
@@ -51,7 +45,7 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user: any = db.prepare('SELECT * FROM User WHERE email = ?').get(email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -65,14 +59,9 @@ router.post('/login', async (req, res) => {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
+    const sessionId = uuidv4();
 
-    await prisma.session.create({
-      data: {
-        userId: user.id,
-        token,
-        expiresAt,
-      },
-    });
+    db.prepare('INSERT INTO Session (id, userId, token, expiresAt) VALUES (?, ?, ?, ?)').run(sessionId, user.id, token, expiresAt.toISOString());
 
     res.cookie('session_token', token, {
       httpOnly: true,
@@ -92,9 +81,7 @@ router.post('/logout', async (req, res) => {
   const token = req.cookies.session_token;
   
   if (token) {
-    await prisma.session.deleteMany({
-      where: { token },
-    });
+    db.prepare('DELETE FROM Session WHERE token = ?').run(token);
   }
 
   res.clearCookie('session_token');
@@ -109,16 +96,18 @@ router.get('/session', async (req, res) => {
     return res.status(401).json({ error: 'No active session' });
   }
 
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: { user: { select: { id: true, username: true, email: true } } },
-  });
+  const session: any = db.prepare(`
+    SELECT s.*, u.id as u_id, u.username as u_username, u.email as u_email 
+    FROM Session s 
+    JOIN User u ON s.userId = u.id 
+    WHERE s.token = ?
+  `).get(token);
 
-  if (!session || session.expiresAt < new Date()) {
+  if (!session || new Date(session.expiresAt) < new Date()) {
     return res.status(401).json({ error: 'Session expired or invalid' });
   }
 
-  res.json({ user: session.user });
+  res.json({ user: { id: session.u_id, username: session.u_username, email: session.u_email } });
 });
 
 export default router;

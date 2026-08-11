@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '../index';
+import db from '../db';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { validateXUrl, extractMediaMetadata, processDownloadJob, checkAvailableStorage } from '../utils/downloader';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -37,34 +38,19 @@ router.post('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'INSUFFICIENT_STORAGE' });
     }
 
-    // Warn for mobile data usage constraint (>500MB)
-    if (estimatedSizeBytes > 500 * 1024 * 1024) {
-      // In a real app, client handles warning, but backend can return a flag
-    }
-
-    const job = await prisma.downloaderJob.create({
-      data: {
-        userId: req.userId!,
-        url,
-        quality: quality || '720p',
-        status: 'QUEUED',
-        sizeBytes: estimatedSizeBytes,
-      }
-    });
+    const jobId = uuidv4();
+    db.prepare('INSERT INTO DownloaderJob (id, userId, url, status, quality, sizeBytes) VALUES (?, ?, ?, ?, ?, ?)').run(
+      jobId, req.userId!, url, 'QUEUED', quality || '720p', estimatedSizeBytes
+    );
+    const job: any = db.prepare('SELECT * FROM DownloaderJob WHERE id = ?').get(jobId);
 
     // Start async processing without blocking request (Event-driven)
-    processDownloadJob(job.id, url, quality)
+    processDownloadJob(jobId, url, quality)
       .then(async (filePath) => {
-        await prisma.downloaderJob.update({
-          where: { id: job.id },
-          data: { status: 'COMPLETED', filePath }
-        });
+        db.prepare('UPDATE DownloaderJob SET status = ?, filePath = ? WHERE id = ?').run('COMPLETED', filePath, jobId);
       })
       .catch(async (err) => {
-        await prisma.downloaderJob.update({
-          where: { id: job.id },
-          data: { status: 'FAILED', error: err.message }
-        });
+        db.prepare('UPDATE DownloaderJob SET status = ?, error = ? WHERE id = ?').run('FAILED', err.message, jobId);
       });
 
     res.status(201).json(job);
@@ -76,10 +62,7 @@ router.post('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
 // Get Queue & History
 router.get('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const jobs = await prisma.downloaderJob.findMany({
-      where: { userId: req.userId! },
-      orderBy: { createdAt: 'desc' },
-    });
+    const jobs = db.prepare('SELECT * FROM DownloaderJob WHERE userId = ? ORDER BY createdAt DESC').all(req.userId!);
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch jobs' });
@@ -106,9 +89,9 @@ router.post('/terminal/command', requireAuth, async (req: AuthenticatedRequest, 
       output = 'Backend: ONLINE\nActive Workers: 1/1\nDatabase: Connected (SQLite)';
       break;
     case 'queue':
-      const queuedCount = await prisma.downloaderJob.count({ where: { status: 'QUEUED' }});
-      const processingCount = await prisma.downloaderJob.count({ where: { status: 'PROCESSING' }});
-      output = `Queued Jobs: ${queuedCount}\nProcessing: ${processingCount}`;
+      const queuedCount: any = db.prepare('SELECT COUNT(*) as c FROM DownloaderJob WHERE status = ?').get('QUEUED');
+      const processingCount: any = db.prepare('SELECT COUNT(*) as c FROM DownloaderJob WHERE status = ?').get('PROCESSING');
+      output = `Queued Jobs: ${queuedCount.c}\nProcessing: ${processingCount.c}`;
       break;
     case 'storage':
       output = 'Estimated available private storage: 5.0 GB\nTermux Storage Access: Limited';

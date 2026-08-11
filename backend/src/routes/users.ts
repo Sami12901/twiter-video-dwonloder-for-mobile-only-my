@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { prisma } from '../index';
+import db from '../db';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -9,21 +10,25 @@ router.get('/:username', async (req, res) => {
   try {
     const { username } = req.params;
     
-    const user = await prisma.user.findUnique({
-      where: { username },
-      select: {
-        id: true,
-        username: true,
-        profile: true,
-        _count: {
-          select: { followers: true, following: true, posts: true }
-        }
-      }
-    });
+    const user: any = db.prepare('SELECT id, username FROM User WHERE username = ?').get(username);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    const stats: any = db.prepare(`
+      SELECT 
+        (SELECT COUNT(*) FROM Follow WHERE followingId = ?) as followers,
+        (SELECT COUNT(*) FROM Follow WHERE followerId = ?) as following,
+        (SELECT COUNT(*) FROM Post WHERE userId = ?) as posts
+    `).get(user.id, user.id, user.id);
+
+    user._count = {
+      followers: stats.followers,
+      following: stats.following,
+      posts: stats.posts
+    };
+    user.profile = null;
 
     res.json(user);
   } catch (error) {
@@ -41,12 +46,8 @@ router.post('/:id/follow', requireAuth, async (req: AuthenticatedRequest, res) =
       return res.status(400).json({ error: 'You cannot follow yourself' });
     }
 
-    await prisma.follow.create({
-      data: {
-        followerId: currentUserId,
-        followingId: targetUserId,
-      }
-    });
+    const followId = uuidv4();
+    db.prepare('INSERT INTO Follow (id, followerId, followingId) VALUES (?, ?, ?)').run(followId, currentUserId, targetUserId);
 
     res.json({ message: 'Successfully followed' });
   } catch (error) {
@@ -60,12 +61,7 @@ router.delete('/:id/follow', requireAuth, async (req: AuthenticatedRequest, res)
     const targetUserId = req.params.id as string;
     const currentUserId = req.userId!;
 
-    await prisma.follow.deleteMany({
-      where: {
-        followerId: currentUserId,
-        followingId: targetUserId,
-      }
-    });
+    db.prepare('DELETE FROM Follow WHERE followerId = ? AND followingId = ?').run(currentUserId, targetUserId);
 
     res.json({ message: 'Successfully unfollowed' });
   } catch (error) {

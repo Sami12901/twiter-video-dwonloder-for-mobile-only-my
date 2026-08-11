@@ -66,7 +66,6 @@ echo ""
 echo "[5/6] Setting up SQLite database..."
 cd backend
 echo "DATABASE_URL=\"file:./dev.db\"" > .env
-npx prisma generate
 echo "  ✓ Database setup complete"
 cd ..
 

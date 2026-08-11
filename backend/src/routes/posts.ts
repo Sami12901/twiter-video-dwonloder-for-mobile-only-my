@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { prisma } from '../index';
+import db from '../db';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -17,18 +18,22 @@ const createPostSchema = z.object({
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { content, mediaUrl, mediaType } = createPostSchema.parse(req.body);
+    const postId = uuidv4();
     
-    const post = await prisma.post.create({
-      data: {
-        content,
-        mediaUrl,
-        mediaType,
-        userId: req.userId!,
-      },
-      include: {
-        user: { select: { id: true, username: true, profile: true } }
-      }
-    });
+    db.prepare('INSERT INTO Post (id, content, mediaUrl, mediaType, userId) VALUES (?, ?, ?, ?, ?)').run(
+      postId, content || null, mediaUrl || null, mediaType || null, req.userId
+    );
+
+    const postRow: any = db.prepare(`
+      SELECT p.*, u.username as u_username 
+      FROM Post p JOIN User u ON p.userId = u.id 
+      WHERE p.id = ?
+    `).get(postId);
+
+    const post = {
+      ...postRow,
+      user: { id: postRow.userId, username: postRow.u_username }
+    };
 
     res.status(201).json(post);
   } catch (error) {
@@ -39,15 +44,16 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
 // Get Feed (Timeline)
 router.get('/feed', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    // Basic feed: all posts ordered by newest
-    // In Phase 3, this will be filtered by 'following'
-    const posts = await prisma.post.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      include: {
-        user: { select: { id: true, username: true, profile: true } }
-      }
-    });
+    const rows = db.prepare(`
+      SELECT p.*, u.username as u_username 
+      FROM Post p JOIN User u ON p.userId = u.id 
+      ORDER BY p.createdAt DESC LIMIT 50
+    `).all() as any[];
+
+    const posts = rows.map(r => ({
+      ...r,
+      user: { id: r.userId, username: r.u_username }
+    }));
 
     res.json(posts);
   } catch (error) {
