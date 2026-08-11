@@ -20,7 +20,7 @@ echo ""
 # ----------------------------------------------------------
 echo "[1/6] Installing system packages..."
 pkg update -y && pkg upgrade -y
-pkg install -y nodejs-lts git python make clang binutils
+pkg install -y nodejs git python make clang binutils
 echo "  ✓ System packages installed"
 
 # ----------------------------------------------------------

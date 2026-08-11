@@ -44,7 +44,7 @@ export const Terminal = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 max-w-4xl mx-auto w-full h-[calc(100vh-80px)] sm:h-screen">
+    <div className="flex-1 flex flex-col p-4 max-w-4xl mx-auto w-full" style={{ height: 'calc(100dvh - 8rem)' }}>
       <div className="flex items-center gap-2 mb-4">
         <TerminalIcon className="text-[var(--color-primary)]" size={28} />
         <h1 className="text-2xl font-bold">System Terminal</h1>

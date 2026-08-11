@@ -24,7 +24,7 @@ export const Feed = () => {
 
   return (
     <div className="flex-1 flex flex-col border-r border-l border-[var(--border)] max-w-2xl w-full">
-      <div className="sticky top-0 z-10 bg-[var(--bg)]/80 backdrop-blur-md p-4 border-b border-[var(--border)]">
+      <div className="sticky top-0 sm:top-0 z-10 bg-[var(--bg)]/80 backdrop-blur-md p-4 border-b border-[var(--border)]">
         <h1 className="text-xl font-bold">For You</h1>
       </div>
       
