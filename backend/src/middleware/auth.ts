@@ -14,20 +14,16 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
   }
 
   try {
-    const session: any = db.prepare(`
-      SELECT s.*, u.id as u_id, u.username as u_username, u.email as u_email 
-      FROM Session s 
-      JOIN User u ON s.userId = u.id 
-      WHERE s.token = ?
-    `).get(token);
+    const session = db.data.sessions.find((s) => s.token === token);
+    const user = session ? db.data.users.find((u) => u.id === session.userId) : null;
 
-    if (!session || new Date(session.expiresAt) < new Date()) {
+    if (!session || !user || new Date(session.expiresAt) < new Date()) {
       return res.status(401).json({ error: 'Session expired' });
     }
 
-    const user = { id: session.u_id, username: session.u_username, email: session.u_email };
+    const safeUser = { id: user.id, username: user.username, email: user.email };
     req.userId = user.id;
-    req.user = user;
+    req.user = safeUser;
     next();
   } catch (error) {
     res.status(500).json({ error: 'Server error during authentication' });

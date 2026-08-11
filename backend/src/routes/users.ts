@@ -10,27 +10,28 @@ router.get('/:username', async (req, res) => {
   try {
     const { username } = req.params;
     
-    const user: any = db.prepare('SELECT id, username FROM User WHERE username = ?').get(username);
+    const user = db.data.users.find(u => u.username === username);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const stats: any = db.prepare(`
-      SELECT 
-        (SELECT COUNT(*) FROM Follow WHERE followingId = ?) as followers,
-        (SELECT COUNT(*) FROM Follow WHERE followerId = ?) as following,
-        (SELECT COUNT(*) FROM Post WHERE userId = ?) as posts
-    `).get(user.id, user.id, user.id);
+    const followersCount = db.data.follows.filter(f => f.followingId === user.id).length;
+    const followingCount = db.data.follows.filter(f => f.followerId === user.id).length;
+    const postsCount = db.data.posts.filter(p => p.userId === user.id).length;
 
-    user._count = {
-      followers: stats.followers,
-      following: stats.following,
-      posts: stats.posts
+    const userProfile = {
+      id: user.id,
+      username: user.username,
+      profile: null,
+      _count: {
+        followers: followersCount,
+        following: followingCount,
+        posts: postsCount
+      }
     };
-    user.profile = null;
 
-    res.json(user);
+    res.json(userProfile);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
@@ -46,12 +47,22 @@ router.post('/:id/follow', requireAuth, async (req: AuthenticatedRequest, res) =
       return res.status(400).json({ error: 'You cannot follow yourself' });
     }
 
-    const followId = uuidv4();
-    db.prepare('INSERT INTO Follow (id, followerId, followingId) VALUES (?, ?, ?)').run(followId, currentUserId, targetUserId);
+    const exists = db.data.follows.find(f => f.followerId === currentUserId && f.followingId === targetUserId);
+    if (exists) {
+      return res.status(400).json({ error: 'Already following' });
+    }
+
+    db.data.follows.push({
+      id: uuidv4(),
+      followerId: currentUserId,
+      followingId: targetUserId,
+      createdAt: new Date().toISOString()
+    });
+    db.write();
 
     res.json({ message: 'Successfully followed' });
   } catch (error) {
-    res.status(400).json({ error: 'Already following or invalid user' });
+    res.status(400).json({ error: 'Failed to follow' });
   }
 });
 
@@ -61,7 +72,8 @@ router.delete('/:id/follow', requireAuth, async (req: AuthenticatedRequest, res)
     const targetUserId = req.params.id as string;
     const currentUserId = req.userId!;
 
-    db.prepare('DELETE FROM Follow WHERE followerId = ? AND followingId = ?').run(currentUserId, targetUserId);
+    db.data.follows = db.data.follows.filter(f => !(f.followerId === currentUserId && f.followingId === targetUserId));
+    db.write();
 
     res.json({ message: 'Successfully unfollowed' });
   } catch (error) {

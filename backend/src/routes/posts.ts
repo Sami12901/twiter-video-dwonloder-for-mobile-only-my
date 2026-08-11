@@ -20,22 +20,27 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { content, mediaUrl, mediaType } = createPostSchema.parse(req.body);
     const postId = uuidv4();
     
-    db.prepare('INSERT INTO Post (id, content, mediaUrl, mediaType, userId) VALUES (?, ?, ?, ?, ?)').run(
-      postId, content || null, mediaUrl || null, mediaType || null, req.userId
-    );
-
-    const postRow: any = db.prepare(`
-      SELECT p.*, u.username as u_username 
-      FROM Post p JOIN User u ON p.userId = u.id 
-      WHERE p.id = ?
-    `).get(postId);
-
-    const post = {
-      ...postRow,
-      user: { id: postRow.userId, username: postRow.u_username }
+    const newPost = {
+      id: postId,
+      content: content || null,
+      mediaUrl: mediaUrl || null,
+      mediaType: mediaType || null,
+      userId: req.userId!,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    res.status(201).json(post);
+    db.data.posts.push(newPost);
+    db.write();
+
+    const user = db.data.users.find(u => u.id === req.userId);
+
+    const postResponse = {
+      ...newPost,
+      user: { id: user?.id, username: user?.username }
+    };
+
+    res.status(201).json(postResponse);
   } catch (error) {
     res.status(400).json({ error: 'Failed to create post', details: error });
   }
@@ -44,18 +49,17 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
 // Get Feed (Timeline)
 router.get('/feed', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const rows = db.prepare(`
-      SELECT p.*, u.username as u_username 
-      FROM Post p JOIN User u ON p.userId = u.id 
-      ORDER BY p.createdAt DESC LIMIT 50
-    `).all() as any[];
+    const sortedPosts = [...db.data.posts].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 50);
 
-    const posts = rows.map(r => ({
-      ...r,
-      user: { id: r.userId, username: r.u_username }
-    }));
+    const postsResponse = sortedPosts.map(p => {
+      const u = db.data.users.find(u => u.id === p.userId);
+      return {
+        ...p,
+        user: { id: u?.id, username: u?.username }
+      };
+    });
 
-    res.json(posts);
+    res.json(postsResponse);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch feed' });
   }

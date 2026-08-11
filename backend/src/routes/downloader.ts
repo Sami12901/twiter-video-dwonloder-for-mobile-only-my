@@ -39,21 +39,40 @@ router.post('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
     }
 
     const jobId = uuidv4();
-    db.prepare('INSERT INTO DownloaderJob (id, userId, url, status, quality, sizeBytes) VALUES (?, ?, ?, ?, ?, ?)').run(
-      jobId, req.userId!, url, 'QUEUED', quality || '720p', estimatedSizeBytes
-    );
-    const job: any = db.prepare('SELECT * FROM DownloaderJob WHERE id = ?').get(jobId);
+    const newJob = {
+      id: jobId,
+      userId: req.userId!,
+      url,
+      status: 'QUEUED',
+      quality: quality || '720p',
+      sizeBytes: estimatedSizeBytes,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    db.data.downloaderJobs.push(newJob);
+    db.write();
 
     // Start async processing without blocking request (Event-driven)
     processDownloadJob(jobId, url, quality)
       .then(async (filePath) => {
-        db.prepare('UPDATE DownloaderJob SET status = ?, filePath = ? WHERE id = ?').run('COMPLETED', filePath, jobId);
+        const job = db.data.downloaderJobs.find(j => j.id === jobId);
+        if (job) {
+          job.status = 'COMPLETED';
+          job.filePath = filePath;
+          db.write();
+        }
       })
       .catch(async (err) => {
-        db.prepare('UPDATE DownloaderJob SET status = ?, error = ? WHERE id = ?').run('FAILED', err.message, jobId);
+        const job = db.data.downloaderJobs.find(j => j.id === jobId);
+        if (job) {
+          job.status = 'FAILED';
+          job.error = err.message;
+          db.write();
+        }
       });
 
-    res.status(201).json(job);
+    res.status(201).json(newJob);
   } catch (error) {
     res.status(500).json({ error: 'Failed to queue job' });
   }
@@ -62,7 +81,9 @@ router.post('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
 // Get Queue & History
 router.get('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const jobs = db.prepare('SELECT * FROM DownloaderJob WHERE userId = ? ORDER BY createdAt DESC').all(req.userId!);
+    const jobs = db.data.downloaderJobs
+      .filter(j => j.userId === req.userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     res.json(jobs);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch jobs' });
@@ -86,12 +107,12 @@ router.post('/terminal/command', requireAuth, async (req: AuthenticatedRequest, 
       output = 'Available commands:\nhelp - Show this message\nstatus - Show system status\nqueue - Show download queue\nstorage - Show available storage\nversion - Show app version';
       break;
     case 'status':
-      output = 'Backend: ONLINE\nActive Workers: 1/1\nDatabase: Connected (SQLite)';
+      output = 'Backend: ONLINE\nActive Workers: 1/1\nDatabase: Connected (JSON)';
       break;
     case 'queue':
-      const queuedCount: any = db.prepare('SELECT COUNT(*) as c FROM DownloaderJob WHERE status = ?').get('QUEUED');
-      const processingCount: any = db.prepare('SELECT COUNT(*) as c FROM DownloaderJob WHERE status = ?').get('PROCESSING');
-      output = `Queued Jobs: ${queuedCount.c}\nProcessing: ${processingCount.c}`;
+      const queuedCount = db.data.downloaderJobs.filter(j => j.status === 'QUEUED').length;
+      const processingCount = db.data.downloaderJobs.filter(j => j.status === 'PROCESSING').length;
+      output = `Queued Jobs: ${queuedCount}\nProcessing: ${processingCount}`;
       break;
     case 'storage':
       output = 'Estimated available private storage: 5.0 GB\nTermux Storage Access: Limited';

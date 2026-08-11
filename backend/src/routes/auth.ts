@@ -23,7 +23,7 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = registerSchema.parse(req.body);
 
-    const existingUser = db.prepare('SELECT * FROM User WHERE email = ? OR username = ?').get(email, username);
+    const existingUser = db.data.users.find(u => u.email === email || u.username === username);
 
     if (existingUser) {
       return res.status(400).json({ error: 'Username or email already exists' });
@@ -32,7 +32,11 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = uuidv4();
 
-    db.prepare('INSERT INTO User (id, username, email, password) VALUES (?, ?, ?, ?)').run(userId, username, email, hashedPassword);
+    db.data.users.push({
+      id: userId, username, email, password: hashedPassword,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    });
+    db.write();
 
     res.status(201).json({ message: 'User created successfully', userId });
   } catch (error) {
@@ -45,7 +49,7 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
-    const user: any = db.prepare('SELECT * FROM User WHERE email = ?').get(email);
+    const user = db.data.users.find(u => u.email === email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -61,7 +65,11 @@ router.post('/login', async (req, res) => {
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
     const sessionId = uuidv4();
 
-    db.prepare('INSERT INTO Session (id, userId, token, expiresAt) VALUES (?, ?, ?, ?)').run(sessionId, user.id, token, expiresAt.toISOString());
+    db.data.sessions.push({
+      id: sessionId, userId: user.id, token, expiresAt: expiresAt.toISOString(),
+      createdAt: new Date().toISOString()
+    });
+    db.write();
 
     res.cookie('session_token', token, {
       httpOnly: true,
@@ -81,7 +89,8 @@ router.post('/logout', async (req, res) => {
   const token = req.cookies.session_token;
   
   if (token) {
-    db.prepare('DELETE FROM Session WHERE token = ?').run(token);
+    db.data.sessions = db.data.sessions.filter(s => s.token !== token);
+    db.write();
   }
 
   res.clearCookie('session_token');
@@ -96,18 +105,14 @@ router.get('/session', async (req, res) => {
     return res.status(401).json({ error: 'No active session' });
   }
 
-  const session: any = db.prepare(`
-    SELECT s.*, u.id as u_id, u.username as u_username, u.email as u_email 
-    FROM Session s 
-    JOIN User u ON s.userId = u.id 
-    WHERE s.token = ?
-  `).get(token);
+  const session = db.data.sessions.find(s => s.token === token);
+  const user = session ? db.data.users.find(u => u.id === session.userId) : null;
 
-  if (!session || new Date(session.expiresAt) < new Date()) {
+  if (!session || !user || new Date(session.expiresAt) < new Date()) {
     return res.status(401).json({ error: 'Session expired or invalid' });
   }
 
-  res.json({ user: { id: session.u_id, username: session.u_username, email: session.u_email } });
+  res.json({ user: { id: user.id, username: user.username, email: user.email } });
 });
 
 export default router;
