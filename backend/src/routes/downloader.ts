@@ -90,6 +90,21 @@ router.get('/jobs', requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// Serve downloaded file to browser
+router.get('/download/:jobId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const job = db.data.downloaderJobs.find(j => j.id === req.params.jobId && j.userId === req.userId);
+    
+    if (!job || !job.filePath) {
+      return res.status(404).json({ error: 'File not found or access denied' });
+    }
+
+    res.download(job.filePath);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
 // Terminal safe execution endpoint
 router.post('/terminal/command', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { command } = req.body;

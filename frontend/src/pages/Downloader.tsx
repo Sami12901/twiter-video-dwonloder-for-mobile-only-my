@@ -57,6 +57,21 @@ export const Downloader = () => {
     }
   };
 
+  const handleDownloadFile = async (jobId: string) => {
+    try {
+      const response = await api.get(`/downloader/download/${jobId}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `nexus_video_${jobId.substring(0, 8)}.mp4`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err: any) {
+      setError('Failed to download file to device');
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch(status) {
       case 'QUEUED': return <Clock size={16} className="text-yellow-500" />;
@@ -125,13 +140,13 @@ export const Downloader = () => {
 
       <h2 className="text-xl font-bold mb-4">Download History</h2>
       
-      <div className="space-y-3 flex-1 overflow-y-auto">
+      <div className="space-y-3 flex-1 overflow-y-auto pb-20">
         {jobs.length === 0 ? (
           <p className="text-[var(--text-muted)] text-center py-8">No downloads yet.</p>
         ) : (
           jobs.map(job => (
-            <div key={job.id} className="bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] flex justify-between items-center">
-              <div className="truncate flex-1 pr-4">
+            <div key={job.id} className="bg-[var(--surface)] p-4 rounded-xl border border-[var(--border)] flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="truncate flex-1">
                 <div className="text-sm font-medium truncate">{job.url}</div>
                 <div className="text-xs text-[var(--text-muted)] mt-1 flex items-center gap-2">
                   <span>{job.quality}</span>
@@ -139,9 +154,19 @@ export const Downloader = () => {
                   <span>{new Date(job.createdAt).toLocaleString()}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs font-bold uppercase tracking-wider">{job.status}</span>
-                {getStatusIcon(job.status)}
+              <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider">{job.status}</span>
+                  {getStatusIcon(job.status)}
+                </div>
+                {job.status === 'COMPLETED' && (
+                  <button
+                    onClick={() => handleDownloadFile(job.id)}
+                    className="text-xs font-bold bg-green-500 text-white px-3 py-1.5 rounded-lg hover:bg-green-600 transition-colors whitespace-nowrap"
+                  >
+                    Save to Device
+                  </button>
+                )}
               </div>
             </div>
           ))
