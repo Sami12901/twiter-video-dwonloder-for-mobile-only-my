@@ -65,11 +65,10 @@ echo "  ✓ Dependencies installed"
 echo ""
 echo "[5/6] Setting up SQLite database..."
 cd backend
-echo 'DATABASE_URL="file:./dev.db"' > .env
+echo "DATABASE_URL=\"file:./dev.db\"" > .env
 npx prisma generate
-npx prisma db push --accept-data-loss
+echo "  ✓ Database setup complete"
 cd ..
-echo "  ✓ Database ready"
 
 # ----------------------------------------------------------
 # Step 6: Create launcher script
